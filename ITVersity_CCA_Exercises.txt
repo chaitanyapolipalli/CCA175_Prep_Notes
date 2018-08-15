@@ -1,0 +1,273 @@
+/**************/
+/**Problem 1**/
+/**************/
+
+Data is available in HDFS file system under /public/crime/csv
+You can check properties of files using hadoop fs -ls -h /public/crime/csv
+Structure of data (ID,Case Number,Date,Block,IUCR,Primary Type,Description,Location Description,Arrest,Domestic,Beat,District,Ward,Community Area,FBI Code,X Coordinate,Y Coordinate,Year,Updated On,Latitude,Longitude,Location)
+File format - text file
+Delimiter - “,”
+Get monthly count of primary crime type, sorted by month in ascending and number of crimes per type in descending order
+Store the result in HDFS path /user/<YOUR_USER_ID>/solutions/solution01/crimes_by_type_by_month
+Output File Format: TEXT
+Output Columns: Month in YYYYMM format, crime count, crime type
+Output Delimiter: \t (tab delimited)
+Output Compression: gzip
+
+
+/*Using RDD''s*/
+spark-shell --master yarn --conf spark.ui.port=14251 --num-executors=4 --executor-memory=2G --executor-cores 2
+
+val crimeData = sc.textFile("/public/crime/csv")
+
+val crimeHeader = crimeData.first
+
+val crimeMap = crimeData.filter(c=>c != crimeHeader)
+
+val crime = crimeMap.map(rec=> {
+(rec.split(",")(2).split(" ")(0).replace("/","").substring(4,8).concat(rec.split(",")(2).split(" ")(0).replace("/","").substring(0,2)).toInt, rec.split(",")(5))
+})
+
+val crimeKeys = crime.map(rec => {(rec,1)}).reduceByKey((t, v) => t+v).map(c=> ((c._1._1, -c._2),c._1._1 + "\t" + c._2 + "\t" + c._1._2)).sortByKey().map(rec => rec._2)
+
+crimeKeys.coalesce(1).saveAsTextFile("/user/chaitanyapolipalli/Dgadiraju_Problems/Problem_1_RDD",classOf[org.apache.hadoop.io.compress.GzipCodec])
+
+/*Using Data Frames*/
+
+spark-shell --master yarn --conf spark.ui.port=14521 --num-executors 4 --executor-memory 2G --executor-cores 2
+
+val crimeData = sc.textFile("/public/crime/csv")
+val crimeHeader = crimeData.first
+val crimeNoHeader = crimeData.filter(c=>c != crimeHeader) 
+
+val crime = crimeNoHeader.map(rec=> {
+(rec.split(",")(2).split(" ")(0).replace("/","").substring(4,8).concat(rec.split(",")(2).split(" ")(0).replace("/","").substring(0,2)).toInt, rec.split(",")(5))
+}).toDF("Date","Primary_Type")
+
+crime.registerTempTable("crime")
+
+val crim_count_per_monthDF = sqlContext.sql("select Date, count(1) crime_count, Primary_Type from crime group by Primary_Type, Date order by Date, crime_count desc")
+
+val crimeRDD = crim_count_per_monthDF.rdd
+val result = crimeRDD.map( c=> {c.mkString("\t")})
+
+result.coalesce(1).saveAsTextFile("/user/chaitanyapolipalli/Dgadiraju_Problems/Problem_1_DF",classOf[org.apache.hadoop.io.compress.GzipCodec])
+
+To validate any gzip compressed data, you cannot view it directly. Copy zipped file from hdfs to local using -get command then use “gunzip file_name” then data will be unzipped then you view data and validate
+
+hadoop fs - get /user/chaitanyapolipalli/Dgadiraju_Problems/Problem_1_DF .
+
+/*In local*/
+
+cd to Problem_1_DF folder.
+gunzip part-00000.gz
+
+This will work only with Text file formats.
+
+With other fileformats, save them to rdd and then load using sc variable and read data.
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/**************/
+/**Problem 2**/
+/**************/
+
+Data is available in local file system /data/retail_db
+Source directories: /data/retail_db/orders and /data/retail_db/customers
+Source delimiter: comma (“,”)
+Source Columns - orders - order_id, order_date, order_customer_id, order_status
+Source Columns - customers - customer_id, customer_fname, customer_lname and many more
+Get the customers who have not placed any orders, sorted by customer_lname and then customer_fname
+Target Columns: customer_lname, customer_fname
+Number of files - 1
+Target Directory: /user/<YOUR_USER_ID>/solutions/solutions02/inactive_customers
+Target File Format: TEXT
+Target Delimiter: comma (“, ”)
+Compression: N/A
+
+
+/*Using RDD*/
+
+import scala.io.Source._
+
+val ordersRaw = scala.io.Source.fromFile("/home/chaitanyapolipalli/retail_db/orders/part-00000").getLines.toList
+val customersRaw = scala.io.Source.fromFile("/home/chaitanyapolipalli/retail_db/customers/part-00000").getLines.toList
+
+val ordersRDD = sc.parallelize(ordersRaw)
+val customersRDD = sc.parallelize(customersRaw)
+
+val ordersMap = ordersRDD.map(o=> {
+(o.split(",")(2).toInt,1)
+})
+
+val customersMap= customersRDD.map(c=>{
+(c.split(",")(0).toInt, (c.split(",")(2),c.split(",")(1)))
+})
+
+val leftOuterJoin = customersMap.leftOuterJoin(ordersMap)
+
+val filteredData = leftOuterJoin.filter({
+rec => rec._2._2 == None
+}).map(f=> f._2).sortByKey().map(c=> c._1._1 + ", " + c._1._2)
+
+val x = filteredData.map( rec=> rec.mkString(","))
+
+x.coalesce(1).saveAsTextFile("/user/chaitanyapolipalli/Dgadiraju_Problems/Problem_2_RDD")
+
+/*Using Data Frames*/
+
+import scala.io.Source._
+
+val ordersRaw = scala.io.Source.fromFile("/home/chaitanyapolipalli/retail_db/orders/part-00000").getLines.toList
+val customersRaw = scala.io.Source.fromFile("/home/chaitanyapolipalli/retail_db/customers/part-00000").getLines.toList
+
+val ordersRDD = sc.parallelize(ordersRaw)
+val customersRDD = sc.parallelize(customersRaw)
+
+val ordersDF = ordersRDD.map( o=> {
+(o.split(",")(2).toInt, o.split(",")(0).toInt)
+}).toDF("order_customer_id","order_id")
+
+val customersDF = customersRDD.map(c=>{
+(c.split(",")(0).toInt,c.split(",")(2),c.split(",")(1))
+}).toDF("customer_id","customer_lname","customer_fname")
+
+ordersDF.registerTempTable("orders")
+customersDF.registerTempTable("customers")
+
+val finalResult = sqlContext.sql("select customer_lname,customer_fname from customers c left outer join orders o on c.customer_id = o.order_customer_id where order_customer_id is null order by customer_lname,customer_fname ")
+
+val interimResult = finalResult.rdd
+
+val result = interimResult.map( rec=> { rec.mkString(", ")})
+
+result.coalesce(1).saveAsTextFile("/user/chaitanyapolipalli/Dgadiraju_Problems/Problem_2_DF")
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/**************/
+/**Problem 3**/
+/**************/
+
+Data is available in HDFS file system under /public/crime/csv
+Structure of data (ID,Case Number,Date,Block,IUCR,Primary Type,Description,Location Description,Arrest,Domestic,Beat,District,Ward,Community Area,FBI Code,X Coordinate,Y Coordinate,Year,Updated On,Latitude,Longitude,Location)
+File format - text file
+Delimiter - “,” (use regex while splitting split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1), as there are some fields with comma and enclosed using double quotes.
+Get top 3 crime types based on number of incidents in RESIDENCE area using “Location Description”
+Store the result in HDFS path /user/<YOUR_USER_ID>/solutions/solution03/RESIDENCE_AREA_CRIMINAL_TYPE_DATA
+Output Fields: Crime Type, Number of Incidents
+Output File Format: JSON
+Output Delimiter: N/A
+Output Compression: No
+
+
+/*Using RDD*/
+
+val crimesRDD = sc.textFile("/public/crime/csv")
+val crimeHeader = crimesRDD.first
+
+val crimesNoHeader = crimesRDD.filter( rec=> rec != crimeHeader)
+
+val crimesFilter = crimesNoHeader.filter(rec=> rec.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1)(7) == "RESIDENCE")
+
+val crimeMapData = crimesFilter.map(c=>(c.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1)(5),1)).reduceByKey((t,v) => t + v)
+
+val crimeKey = sc.parallelize(crimeMapData.map(c=> {(c._2,c._1)}).sortByKey(false).take(3))
+
+val finalResult = crimeKey.coalesce(1).map(rec=>(rec._2,rec._1)).toDF("Crime_Type","Number_of_Incidents")
+
+finalResult.write.json("/user/chaitanyapolipalli/Dgadiraju_Problems/Problem_3_RDD1")
+
+
+/*Using Data Frames*/
+
+val crimesRDD = sc.textFile("/public/crime/csv")
+val crimeHeader = crimesRDD.first
+
+val crimesNoHeader = crimesRDD.filter( rec=> rec != crimeHeader)
+val crimesFilter = crimesNoHeader.filter(rec=> rec.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1)(7) == "RESIDENCE")
+val crimeMapData = crimesFilter.map(c=>(c.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1)(5),1))
+val crimekey = crimeMapData.map(c=> {(c._2,c._1)})
+
+val crimeDF = crimekey.map( rec=> 
+(rec._2,rec._1)
+).toDF("Crime_Type","Number_of_Incidents")
+
+crimeDF.registerTempTable("crime_table")
+
+val interimResult = sqlContext.sql("select Crime_Type, count(1) Total_Count from crime_table group by Number_of_Incidents,Crime_Type order by Total_Count desc limit 3")
+
+interimResult.write.json("/user/chaitanyapolipalli/Dgadiraju_Problems/Problem_3_DF")
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/**************/
+/**Problem 4**/
+/**************/
+
+
+Data is available in local file system under /data/nyse (ls -ltr /data/nyse)
+Fields (stockticker:string, transactiondate:string, openprice:float, highprice:float, lowprice:float, closeprice:float, volume:bigint)
+Convert file format to parquet
+Save it /user/<YOUR_USER_ID>/nyse_parquet
+
+
+hadoop fs -copyFromLocal /home/chaitanyapolipalli/nyse/ /user/chaitanyapolipalli/nyse
+
+import scala.io.Source._
+
+val nyseRDD = sc.textFile("/user/chaitanyapolipalli/nyse/nyse")
+
+val nyseDF = nyseRDD.coalesce(4).map( rec=> {
+(rec.split(",")(0), rec.split(",")(1), rec.split(",")(2).toFloat, rec.split(",")(3).toFloat, rec.split(",")(4).toFloat,rec.split(",")(5).toFloat,rec.split(",")(6).toInt)
+}).toDF("stockticker","transactiondate","openprice","highprice","lowprice","closeprice","volume")
+
+nyseDF.write.parquet("/user/chaitanyapolipalli/Dgadiraju_Problems/Problem_4")
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/**************/
+/**Problem 5**/
+/**************/
+
+Data is available in HDFS /public/randomtextwriter
+Get word count for the input data using space as delimiter (for each word, we need to get how many types it is repeated in the entire input data set)
+Number of executors should be 10
+Executor memory should be 3 GB
+Executor cores should be 20 in total (2 per executor)
+Number of output files should be 8
+Avro dependency details: groupId -> com.databricks, artifactId -> spark-avro_2.10, version -> 2.0.1
+Target Directory: /user/<YOUR_USER_ID>/solutions/solution05/wordcount
+Target File Format: Avro
+Target fields: word, count
+Compression: N/A or default
+
+spark-shell --master yarn --conf spark.ui.port=14525 --num-executors 10 --executor-memory 3G --executor-cores 2 --packages com.databricks:spark-avro_2.10:2.0.1
+
+if jar file given for avro instead of groupId and artifact details change command as below
+
+spark-shell --master yarn --conf spark.ui.port=12345 --num-executors 2 --executor-memory 1G --executor-cores 2 --jars "<given_path>"
+
+import com.databricks.spark.avro._
+
+val dataRDD = sc.textFile("/public/randomtextwriter")
+
+dataRDD.take(10).foreach(println)
+
+val dataMap = dataRDD.flatMap( rec=> {
+(rec.split(" ")) 
+})
+
+val interimData = dataMap.map( c=> {
+(c,1)
+}).reduceByKey((t,v) => t+v,8)
+
+val dataDF = interimData.toDF("word","count")
+
+dataDF.write.avro("/user/chaitanyapolipalli/Dgadiraju_Problems/Problem_5")
+
+
+
