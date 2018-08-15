@@ -1,0 +1,39 @@
+/**************/
+/**Problem 5**/
+/**************/
+
+Data is available in HDFS /public/randomtextwriter
+Get word count for the input data using space as delimiter (for each word, we need to get how many types it is repeated in the entire input data set)
+Number of executors should be 10
+Executor memory should be 3 GB
+Executor cores should be 20 in total (2 per executor)
+Number of output files should be 8
+Avro dependency details: groupId -> com.databricks, artifactId -> spark-avro_2.10, version -> 2.0.1
+Target Directory: /user/<YOUR_USER_ID>/solutions/solution05/wordcount
+Target File Format: Avro
+Target fields: word, count
+Compression: N/A or default
+
+spark-shell --master yarn --conf spark.ui.port=14525 --num-executors 10 --executor-memory 3G --executor-cores 2 --packages com.databricks:spark-avro_2.10:2.0.1
+
+if jar file given for avro instead of groupId and artifact details change command as below
+
+spark-shell --master yarn --conf spark.ui.port=12345 --num-executors 2 --executor-memory 1G --executor-cores 2 --jars "<given_path>"
+
+import com.databricks.spark.avro._
+
+val dataRDD = sc.textFile("/public/randomtextwriter")
+
+dataRDD.take(10).foreach(println)
+
+val dataMap = dataRDD.flatMap( rec=> {
+(rec.split(" ")) 
+})
+
+val interimData = dataMap.map( c=> {
+(c,1)
+}).reduceByKey((t,v) => t+v,8)
+
+val dataDF = interimData.toDF("word","count")
+
+dataDF.write.avro("/user/chaitanyapolipalli/Dgadiraju_Problems/Problem_5")
