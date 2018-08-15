@@ -1,0 +1,75 @@
+
+/**************/
+/**Problem 2**/
+/**************/
+
+Data is available in local file system /data/retail_db
+Source directories: /data/retail_db/orders and /data/retail_db/customers
+Source delimiter: comma (“,”)
+Source Columns - orders - order_id, order_date, order_customer_id, order_status
+Source Columns - customers - customer_id, customer_fname, customer_lname and many more
+Get the customers who have not placed any orders, sorted by customer_lname and then customer_fname
+Target Columns: customer_lname, customer_fname
+Number of files - 1
+Target Directory: /user/<YOUR_USER_ID>/solutions/solutions02/inactive_customers
+Target File Format: TEXT
+Target Delimiter: comma (“, ”)
+Compression: N/A
+
+
+/*Using RDD*/
+
+import scala.io.Source._
+
+val ordersRaw = scala.io.Source.fromFile("/home/chaitanyapolipalli/retail_db/orders/part-00000").getLines.toList
+val customersRaw = scala.io.Source.fromFile("/home/chaitanyapolipalli/retail_db/customers/part-00000").getLines.toList
+
+val ordersRDD = sc.parallelize(ordersRaw)
+val customersRDD = sc.parallelize(customersRaw)
+
+val ordersMap = ordersRDD.map(o=> {
+(o.split(",")(2).toInt,1)
+})
+
+val customersMap= customersRDD.map(c=>{
+(c.split(",")(0).toInt, (c.split(",")(2),c.split(",")(1)))
+})
+
+val leftOuterJoin = customersMap.leftOuterJoin(ordersMap)
+
+val filteredData = leftOuterJoin.filter({
+rec => rec._2._2 == None
+}).map(f=> f._2).sortByKey().map(c=> c._1._1 + ", " + c._1._2)
+
+val x = filteredData.map( rec=> rec.mkString(","))
+
+x.coalesce(1).saveAsTextFile("/user/chaitanyapolipalli/Dgadiraju_Problems/Problem_2_RDD")
+
+/*Using Data Frames*/
+
+import scala.io.Source._
+
+val ordersRaw = scala.io.Source.fromFile("/home/chaitanyapolipalli/retail_db/orders/part-00000").getLines.toList
+val customersRaw = scala.io.Source.fromFile("/home/chaitanyapolipalli/retail_db/customers/part-00000").getLines.toList
+
+val ordersRDD = sc.parallelize(ordersRaw)
+val customersRDD = sc.parallelize(customersRaw)
+
+val ordersDF = ordersRDD.map( o=> {
+(o.split(",")(2).toInt, o.split(",")(0).toInt)
+}).toDF("order_customer_id","order_id")
+
+val customersDF = customersRDD.map(c=>{
+(c.split(",")(0).toInt,c.split(",")(2),c.split(",")(1))
+}).toDF("customer_id","customer_lname","customer_fname")
+
+ordersDF.registerTempTable("orders")
+customersDF.registerTempTable("customers")
+
+val finalResult = sqlContext.sql("select customer_lname,customer_fname from customers c left outer join orders o on c.customer_id = o.order_customer_id where order_customer_id is null order by customer_lname,customer_fname ")
+
+val interimResult = finalResult.rdd
+
+val result = interimResult.map( rec=> { rec.mkString(", ")})
+
+result.coalesce(1).saveAsTextFile("/user/chaitanyapolipalli/Dgadiraju_Problems/Problem_2_DF")
