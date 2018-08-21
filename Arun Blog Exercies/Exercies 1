@@ -1,1 +1,92 @@
 #1
+Using sqoop, import orders table into hdfs to folders /user/cloudera/problem1/orders. File should be loaded as Avro File and use snappy compression
+
+Using sqoop, import order_items  table into hdfs to folders /user/cloudera/problem1/order-items. Files should be loaded as avro file and use snappy compression
+
+Using Spark Scala load data at /user/cloudera/problem1/orders and /user/cloudera/problem1/orders-items items as dataframes. 
+
+Expected Intermediate Result: Order_Date , Order_status, total_orders, total_amount. In plain english, please find total orders and total amount per status per day. The result should be sorted by order date in descending, order status in ascending and total amount in descending and total orders in ascending. Aggregation should be done using below methods. However, sorting can be done using a dataframe or RDD. Perform aggregation in each of the following ways
+
+a). Just by using Data Frames API - here order_date should be YYYY-MM-DD format
+b). Using Spark SQL  - here order_date should be YYYY-MM-DD format
+c). By using combineByKey function on RDDS -- No need of formatting order_date or total_amount
+
+Store the result as parquet file into hdfs using gzip compression under folder
+/user/cloudera/problem1/result4a-gzip
+/user/cloudera/problem1/result4b-gzip
+/user/cloudera/problem1/result4c-gzip
+
+Store the result as parquet file into hdfs using snappy compression under folder
+/user/cloudera/problem1/result4a-snappy
+/user/cloudera/problem1/result4b-snappy
+/user/cloudera/problem1/result4c-snappy
+
+Store the result as CSV file into hdfs using No compression under folder
+/user/cloudera/problem1/result4a-csv
+/user/cloudera/problem1/result4b-csv
+/user/cloudera/problem1/result4c-csv
+
+create a mysql table named result and load data from /user/cloudera/problem1/result4a-csv to mysql table named result 
+
+
+--------------------------------------------------------------------------------------------------------------------------------------
+
+sqoop import \
+--connect jdbc:mysql://ms.itversity.com/retail_db \
+--username retail_user \
+--password itversity \
+--table orders \
+--target-dir /user/chaitanyapolipalli/ArunBlogPractice/problem1/orders \
+--as-avrodatafile \
+--compress \
+--compression-codec org.apache.hadoop.io.compress.SnappyCodec
+
+sqoop import \
+--connect jdbc:mysql://ms.itversity.com/retail_db \
+--username retail_user \
+--password itversity \
+--table order_items \
+--target-dir /user/chaitanyapolipalli/ArunBlogPractice/problem1/order-items \
+--as-avrodatafile \
+--compress \
+--compression-codec org.apache.hadoop.io.compress.SnappyCodec \
+--m 1
+
+spark-shell --master yarn --conf spark.ui.port=14521 --num-executors 2 --executor-memory 3G --executor-cores 2 --packages com.databricks:spark-avro_2.10:2.0.1
+
+import com.databricks.spark.avro._
+
+sqlContext.setConf("spark.sql.shuffle.partitions","2")
+
+val ordersDF = sqlContext.read.avro("/user/chaitanyapolipalli/ArunBlogPractice/problem1/orders")
+val orderItemsDF = sqlContext.read.avro("/user/chaitanyapolipalli/ArunBlogPractice/problem1/order-items")
+
+ordersDF.registerTempTable("orders")
+orderItemsDF.registerTempTable("order_items")
+
+val interim  = sqlContext.sql("select  to_date(from_unixtime((order_date)/1000)) order_date,order_status, round(sum(order_item_subtotal),2) total_amount, count(distinct(order_id)) total_orders from orders o join order_items oi on oi.order_item_order_id = o.order_id group by to_date(from_unixtime((order_date)/1000)),order_status order by order_date desc, order_status, total_amount desc,total_orders")
+
+sqlContext.setConf("spark.sql.parquet.compression.codec","gzip")
+
+interim.write.parquet("/user/chaitanyapolipalli/ArunBlogPractice/problem1/result4b-gzip")
+
+sqlContext.setConf("spark.sql.parquet.compression.codec","snappy")
+
+interim.write.parquet("/user/chaitanyapolipalli/ArunBlogPractice/problem1/result4b-snappy")
+
+interim.map(rec=> rec(0) + "," + rec(1) + "," + rec(2) + "," + rec(3)).saveAsTextFile("/user/chaitanyapolipalli/ArunBlogPractice/problem1/result4b-csv")
+
+mysql -u retail_user -h ms.itversity.com -p
+
+use retail_export;
+
+create table chaitanya_polipalli_arun_blog(order_date varchar(200), status varchar(25), total_amount float, total_orders int);
+
+sqoop export \
+--connect jdbc:mysql://ms.itversity.com/retail_export \
+--username retail_user \
+--password itversity \
+--table chaitanya_polipalli_arun_blog \
+--export-dir /user/chaitanyapolipalli/ArunBlogPractice/problem1/result4b-csv \
+--columns order_date,status,total_amount,total_orders \
+--m 1
