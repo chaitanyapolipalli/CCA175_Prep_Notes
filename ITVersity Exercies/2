@@ -1,0 +1,51 @@
+# Instructions
+# Get the customers who have not placed any orders, sorted by customer_lname and then customer_fname
+
+# Data Description
+# Data is available in local file system /data/retail_db
+
+# retail_db information:
+
+# Source directories: /data/retail_db/orders and /data/retail_db/customers
+# Source delimiter: comma(",")
+# Source Columns - orders - order_id, order_date, order_customer_id, order_status
+# Source Columns - customers - customer_id, customer_fname, customer_lname and many more
+# Output Requirements
+# Target Columns: customer_lname, customer_fname
+# Number of Files: 1
+# Place the output file in the HDFS directory
+# /user/`whoami`/problem2/solution/
+# Replace `whoami` with your OS user name
+# File format should be text
+# delimiter is (",")
+# Compression: Uncompressed
+# End of Problem
+
+
+spark-shell --master yarn --conf spark.ui.port=12541 --num-executors 3 --executor-cores 2 --executor-memory 3G
+
+val ordersRDD = sc.textFile("/public/retail_db/orders")
+val customersRDD = sc.textFile("/public/retail_db/customers")
+
+val ordersDF = ordersRDD.map(rec=> {
+(rec.split(",")(2).toInt,rec.split(",")(0).toInt)
+}).toDF("order_customer_id","order_id")
+
+val customersDF = customersRDD.map(rec=> {
+(rec.split(",")(0),rec.split(",")(2),rec.split(",")(1))
+}).toDF("customer_id","customer_lname","customer_fname")
+
+ordersDF.registerTempTable("orders")
+customersDF.registerTempTable("customers")
+
+sqlContext.setConf("spark.sql.shuffle.partitions","2")
+
+val resultSet = sqlContext.sql("select customer_lname, customer_fname from customers c left outer join orders o on c.customer_id=o.order_customer_id where o.order_id is null order by customer_lname, customer_fname")
+
+val resultSetRdd = resultSet.rdd
+
+resultSetRdd.map(rec=> {
+rec.mkString(",")
+}).coalesce(1).saveAsTextFile("/user/chaitanyapolipalli/Practice_exam/problem2/solution/")
+
+
