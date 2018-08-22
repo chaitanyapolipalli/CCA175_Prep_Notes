@@ -1,0 +1,27 @@
+# Instructions
+# Convert NYSE data into parquet
+
+# NYSE data Description
+# Data is available in local file system under /data/NYSE (ls -ltr /data/NYSE)
+
+# NYSE Data information:
+
+# Fields (stockticker:string, transactiondate:string, openprice:float, highprice:float, lowprice:float, closeprice:float, volume:bigint)
+# Output Requirements
+# Column Names: stockticker, transactiondate, openprice, highprice, lowprice, closeprice, volume
+# Convert file format to parquet
+# Place the output file in the HDFS directory
+# /user/`whoami`/problem4/solution/
+# Replace `whoami` with your OS user name
+# End of Problem
+
+
+hadoop fs -copyFromLocal /nyse /user/chaitanyapolipalli/nyse
+
+val nyseDF = sqlContext.read.text("/user/chaitanyapolipalli/nyse")
+
+sqlContext.setConf("spark.sql.shuffle.partitions","1")
+
+nyseDF.coalesce(1).write.parquet("/user/chaitanyapolipalli/Practice_exam/problem4/solution/")
+
+
