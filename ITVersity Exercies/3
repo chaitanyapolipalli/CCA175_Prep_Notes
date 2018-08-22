@@ -1,0 +1,36 @@
+# Instructions
+# Get top 3 crime types based on number of incidents in RESIDENCE area using "Location Description"
+
+# Data Description
+# Data is available in HDFS under /public/crime/csv
+
+# crime data information:
+
+# Structure of data: (ID, Case Number, Date, Block, IUCR, Primary Type, Description, Location Description, Arrst, Domestic, Beat, District, Ward, Community Area, FBI Code, X Coordinate, Y Coordinate, Year, Updated on, Latitude, Longitude, Location)
+# File format - text file
+# Delimiter - "," (use regex while splitting split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1), as there are some fields with comma and enclosed using double quotes.
+# Output Requirements
+# Output Fields: crime_type, incident_count
+# Output File Format: JSON
+# Delimiter: N/A
+# Compression: No
+# Place the output file in the HDFS directory
+# /user/`whoami`/problem3/solution/
+# Replace `whoami` with your OS user name
+# End of Problem
+
+
+val dataCrimes = sc.textFile("/public/crime/csv")
+
+val dataDF = dataCrimes.filter(rec=> rec.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1)(7) == "RESIDENCE").map(rec=> {
+(rec.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1)(5), 1)
+}).toDF("type","1")
+
+
+dataDF.registerTempTable("crimes")
+
+sqlContext.setConf("spark.sql.shuffle.partitions","2")
+
+val result = sqlContext.sql("select type, count(1) total_count from crimes group by type order by total_count desc limit 3")
+
+result.write.json("/user/chaitanyapolipalli/Practice_exam/problem3/solution/")
