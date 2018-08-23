@@ -1,0 +1,27 @@
+# Instructions
+# Remove header from h1b data
+
+# Data Description
+# h1b data with ascii null "\0" as delimiter is available in HDFS
+
+# h1b data information:
+
+# HDFS location: /public/h1b/h1b_data
+# First record is the header for the data
+# Output Requirements
+# Remove the header from the data and save rest of the data as is
+# Data should be compressed using snappy algorithm
+# Place the H1B data in the HDFS directory
+# /user/`whoami`/problem9/solution/
+# Replace `whoami` with your OS user name
+# End of Problem
+
+spark-shell --master yarn --conf spark.ui.port=15241 --num-executors 4 --executor-memory 3G --executor-cores 2
+
+val data = sc.textFile("/public/h1b/h1b_data")
+
+val header = data.first
+
+val noHeaderData = data.filter(rec=> rec != header)
+
+noHeaderData.coalesce(3).saveAsTextFile("/user/chaitanyapolipalli/Practice_exam/problem9/solution/",classOf[org.apache.hadoop.io.compress.SnappyCodec])
