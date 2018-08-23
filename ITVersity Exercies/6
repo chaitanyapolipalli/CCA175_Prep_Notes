@@ -1,0 +1,49 @@
+# Instructions
+# Get total number of orders for each customer where the cutomer_state = 'TX'
+
+# Data Description
+# retail_db data is available in HDFS at /public/retail_db
+
+# retail_db data information:
+
+# Source directories: /public/retail_db/orders and /public/retail_db/customers
+# Source Columns - orders - order_id, order_date, order_customer_id, order_status
+# Source Columns - customers - customer_id, customer_fname, customer_lname, customer_state (8th column) and many more
+# delimiter: (",")
+# Output Requirements
+# Output Fields: customer_fname, customer_lname, order_count
+# File Format: text
+# Delimiter: Tab character (\t)
+# Place the result file in the HDFS directory
+# /user/`whoami`/problem6/solution/
+# Replace `whoami` with your OS user name
+# End of Problem
+
+
+spark-shell --master yarn --conf spark.ui.port=12541 --num-executors 4 --executor-cores 2 --executor-memory 3G
+
+val rawOrders  = sc.textFile("/public/retail_db/orders")
+val rawCustomers = sc.textFile("/public/retail_db/customers")
+
+val txCustomersDF = rawCustomers.filter(rec=> rec.split(",")(7) == "TX").map(rec=> {
+(rec.split(",")(0),rec.split(",")(1),rec.split(",")(2))
+}).toDF("customer_id","customer_fname","customer_lname")
+
+val ordersDF = rawOrders.map(rec=> {
+(rec.split(",")(2),1)
+}).toDF("order_customer_id","1")
+
+txCustomersDF.registerTempTable("customers")
+ordersDF.registerTempTable("orders")
+
+val resultRaw = sqlContext.sql("select customer_fname,customer_lname, count(1) order_count from orders o inner join customers c on o.order_customer_id = c.customer_id group by customer_id,customer_fname,customer_lname")
+
+val result = resultRaw.rdd
+
+result.coalesce(5).map(rec=> rec.mkString("\t")).saveAsTextFile("/user/chaitanyapolipalli/Practice_exam/problem6/solution/")
+
+
+
+
+
+
