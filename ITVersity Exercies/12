@@ -1,0 +1,40 @@
+# Instructions
+# Get top 5 employers for year 2016 where the status is WITHDRAWN or CERTIFIED-WITHDRAWN or DENIED
+
+# Data Description
+# h1b data with ascii null "\0" as delimiter is available in HDFS
+
+# h1b data information:
+
+# HDFS Location: /public/h1b/h1b_data
+# Ignore first record which is header of the data
+# YEAR is 7th field in the data
+# STATUS is 2nd field in the data
+# EMPLOYER is 3rd field in the data
+# There are some LCAs for which YEAR is NA, ignore those records
+# Output Requirements
+# File Format: parquet
+# Output Fields: employer_name, lca_count
+# Data needs to be in descending order by count
+# Place the output files in the HDFS directory
+# /user/`whoami`/problem12/solution/
+# Replace `whoami` with your OS user name
+# End of Problem
+
+
+spark-shell --master yarn --conf spark.ui.port=15241 --num-executors 4 --executor-memory 3G --executor-cores
+
+val dataRaw = sc.textFile("/public/h1b/h1b_data")
+
+val header = dataRaw.first
+
+val noHeader = dataRaw.filter(rec=> rec != header)
+
+val filterData = noHeader.filter(rec=> rec.split("\000")(7) == "2016").filter(rec => rec.split("\000")(1) == "WITHDRAWN" || rec.split("\000")(1) == "CERTIFIED-WITHDRAWN" || rec.split("\000")(1) == "DENIED").map(rec=> (rec.split("\000")(2),1)).toDF("Employer","1")
+
+filterData.registerTempTable("New_Data")
+
+val result = sqlContext.sql("select Employer, count(1) lca_count from New_Data group by Employer order by lca_count desc limit 5")
+
+result.write.parquet("/user/chaitanyapolipalli/Practice_exam/problem12/solution/")
+
