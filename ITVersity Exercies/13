@@ -1,0 +1,57 @@
+# Instructions
+# Copy all h1b data from HDFS to Hive table excluding those where year is NA or prevailing_wage is NA
+
+# Data Description
+# h1b data with ascii null "\0" as delimiter is available in HDFS
+
+# h1b data information:
+
+# HDFS Location: /public/h1b/h1b_data_noheader
+# Fields: 
+# ID, CASE_STATUS, EMPLOYER_NAME, SOC_NAME, JOB_TITLE, FULL_TIME_POSITION, PREVAILING_WAGE, YEAR, WORKSITE, LONGITUDE, LATITUDE
+# Ignore data where PREVAILING_WAGE is NA or YEAR is NA
+# PREVAILING_WAGE is 7th field
+# YEAR is 8th field
+# Number of records matching criteria: 3002373
+# Output Requirements
+# Save it in Hive Database
+# Create Database: CREATE DATABASE IF NOT EXISTS `whoami`
+# Switch Database: USE `whoami`
+# Save data to hive table h1b_data
+# Create table command:
+
+# CREATE TABLE h1b_data (
+  # ID                 INT,
+  # CASE_STATUS        STRING,
+  # EMPLOYER_NAME      STRING,
+  # SOC_NAME           STRING,
+  # JOB_TITLE          STRING,
+  # FULL_TIME_POSITION STRING,
+  # PREVAILING_WAGE    DOUBLE,
+  # YEAR               INT,
+  # WORKSITE           STRING,
+  # LONGITUDE          STRING,
+  # LATITUDE           STRING
+# )
+                
+# Replace `whoami` with your OS user name
+# End of Problem
+
+
+spark-shell --master yarn --conf spark.ui.port=15241 --num-executors 4 --executor-memory 3G --executor-cores 2
+
+val rawData = sc.textFile("/public/h1b/h1b_data_noheader")
+
+val filteredData = rawData.filter(rec=> rec.split("\000")(7) != "NA").filter(rec=> rec.split("\000")(6) != "NA").map(rec=> {
+(rec.split("\000")(0),rec.split("\000")(1),rec.split("\000")(2),rec.split("\000")(3),rec.split("\000")(4),rec.split("\000")(5),rec.split("\000")(6),rec.split("\000")(7),rec.split("\000")(8),rec.split("\000")(9))
+}).toDF("ID", "CASE_STATUS", "EMPLOYER_NAME", "SOC_NAME", "JOB_TITLE", "FULL_TIME_POSITION", "PREVAILING_WAGE", "YEAR", "WORKSITE", "LONGITUDE")
+
+filteredData.registerTempTable("Hive_data")
+
+sqlContext.sql("use chaitanyapolipalli_daily_revenue_txt")
+
+sqlContext.sql("create table chaitanyapolipalli_daily_revenue_txt.h1b_data as select * from Hive_data")
+
+
+
+
