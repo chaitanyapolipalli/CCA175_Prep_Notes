@@ -1,0 +1,32 @@
+# Instructions
+# List the order Items where the order_status = 'PENDING PAYMENT' order by order_id
+
+# Data Description
+# Data is available in HDFS location
+
+# retail_db data information:
+
+# Source directories: /data/retail_db/orders
+# Source delimiter: comma(",")
+# Source Columns - orders - order_id, order_date, order_customer_id, order_status
+# Output Requirements
+# Target columns: order_id, order_date, order_customer_id, order_status
+# File Format: orc
+# Place the output files in the HDFS directory
+# /user/`whoami`/problem8/solution/
+# Replace `whoami` with your OS user name
+# End of Problem
+
+spark-shell --master yarn --conf spark.ui.port=14521 --num-executors 4 --executor-memory 3G --executor-cores 2
+
+val orders = sc.textFile("/public/retail_db/orders")
+
+val filter = orders.filter(rec=> rec.split(",")(3) == "PENDING_PAYMENT").map(rec=> {
+(rec.split(",")(0).toInt,rec.split(",")(1),rec.split(",")(2).toInt,rec.split(",")(3))
+}).toDF("order_id", "order_date", "order_customer_id", "order_status")
+
+filter.registerTempTable("orders")
+
+val query = sqlContext.sql("select * from orders order by order_id")
+
+query.coalesce(1).write.orc("/user/chaitanyapolipalli/Practice_exam/problem8/solution/")
