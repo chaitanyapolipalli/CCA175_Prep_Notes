@@ -1,0 +1,37 @@
+# Instructions
+# Get number of LCAs by status for the year 2016
+
+# Data Description
+# h1b data with ascii null "\0" as delimiter is available in HDFS
+
+# h1b data information:
+
+# HDFS Location: /public/h1b/h1b_data
+# Ignore first record which is header of the data
+# YEAR is 8th field in the data
+# STATUS is 2nd field in the data
+# There are some LCAs for which YEAR is NA, ignore those records
+# Output Requirements
+# File Format: json
+# Output Field Names: year, status, count
+# Place the output files in the HDFS directory
+# /user/`whoami`/problem11/solution/
+# Replace `whoami` with your OS user name
+# End of Problem
+
+
+spark-shell --master yarn --conf spark.ui.port=15241 --num-executors 4 --executor-memory 3G --executor-cores 2
+
+val dataRaw = sc.textFile("/public/h1b/h1b_data")
+
+val header = dataRaw.first
+
+val filter = dataRaw.filter(rec=> rec != header).filter(rec=> rec.split("\000")(7) == "2016").map(rec=> (rec.split("\000")(7).toInt,rec.split("\000")(1))).toDF("Year","Status")
+
+filter.registerTempTable("LCA_Status")
+
+sqlContext.setConf("spark.sql.shuffle.partitions","2")
+
+val table = sqlContext.sql("select Year, Status, count(1) count from LCA_Status group by Status, Year")
+
+table.write.json("/user/chaitanyapolipalli/Practice_exam/problem11/solution/")
