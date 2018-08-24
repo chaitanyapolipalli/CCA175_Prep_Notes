@@ -37,10 +37,6 @@ val header = nyse_symbols.first
 val noheader = nyse_symbols.filter(rec=> rec != header)
 
 val nyseDF = nyse_data.map(rec=> {
-(rec.split(",")(0),rec.split(",")(1),rec.split(",")(2),rec.split(",")(3),rec.split(",")(4),rec.split(",")(5),rec.split(",")(6))
-}).toDF("stockticker", "transactiondate", "openprice", "highprice", "lowprice", "closeprice", "volume")
-
-val nyseDF = nyse_data.map(rec=> {
 (rec.split(",")(0))
 }).distinct.toDF("stockticker")
 
