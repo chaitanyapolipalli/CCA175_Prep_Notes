@@ -1,0 +1,38 @@
+# Instructions
+# Get NYSE data in ascending order by date and descending order by volume
+
+# Data Description
+# NYSE data with "," as delimiter is available in HDFS
+
+# NYSE data information:
+
+# HDFS location: /public/nyse
+# There is no header in the data
+# Output Requirements
+# Save data back to HDFS
+# Column order: stockticker, transactiondate, openprice, highprice, lowprice, closeprice, volume
+# File Format: text
+# Delimiter: :
+# Place the sorted NYSE data in the HDFS directory
+# /user/`whoami`/problem16/solution/
+# Replace `whoami` with your OS user name
+# End of Problem
+
+
+spark-shell --master yarn --conf spark.ui.port=15241 --num-executors 4 --executor-cores 2 --executor-memory 3G
+
+val data = sc.textFile("/public/nyse")
+
+val dataDF = data.map(rec => {
+(rec.split(",")(0),rec.split(",")(1).toInt,rec.split(",")(2),rec.split(",")(3),rec.split(",")(4),rec.split(",")(5),rec.split(",")(6).toInt)
+}).toDF("stockticker", "transactiondate", "openprice", "highprice", "lowprice", "closeprice", "volume")
+
+dataDF.registerTempTable("NYSE_data")
+
+val query = sqlContext.sql("select * from NYSE_data order by transactiondate, volume desc")
+
+val queryRdd = query.rdd
+
+val result = queryRdd.map(rec=> rec.mkString(":"))
+
+result.coalesce(1).saveAsTextFile("/user/chaitanyapolipalli/Practice_exam/problem16/solution/")
