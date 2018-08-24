@@ -1,0 +1,57 @@
+# Instructions
+# Get the name of stocks displayed along with other information
+
+# Data Description
+# NYSE data with "," as delimiter is available in HDFS
+
+# NYSE data information:
+
+# HDFS location: /public/nyse
+# There is no header in the data
+# NYSE Symbols data with tab character (\t) as delimiter is available in HDFS
+
+# NYSE Symbols data information:
+
+# HDFS location: /public/nyse_symbols
+# First line is header and it should be included
+# Output Requirements
+# Get all NYSE details along with stock name if exists, if not stockname should be empty
+# Column Order: stockticker, stockname, transactiondate, openprice, highprice, lowprice, closeprice, volume
+# Delimiter: ,
+# File Format: text
+# Place the data in the HDFS directory
+# /user/`whoami`/problem18/solution/
+# Replace `whoami` with your OS user name
+# End of Problem
+
+spark-shell --master yarn --conf spark.ui.port=15241 --num-executors 4 --executor-memory 3G --executor-cores 2 --packages com.databricks:spark-avro_2.10:2.0.1
+
+import com.databricks.spark.avro._
+val nyse_data = sc.textFile("/public/nyse")
+
+val nyse_symbols = sc.textFile("/public/nyse_symbols")
+
+val header = nyse_symbols.first
+
+val noheader = nyse_symbols.filter(rec=> rec != header)
+
+val nyseDF = nyse_data.map(rec=> {
+(rec.split(",")(0),rec.split(",")(1),rec.split(",")(2),rec.split(",")(3),rec.split(",")(4),rec.split(",")(5),rec.split(",")(6))
+}).toDF("stockticker", "transactiondate", "openprice", "highprice", "lowprice", "closeprice", "volume")
+
+val symbolsDF = noheader.map(rec=> {
+(rec.split("\t")(0).trim,rec.split("\t")(1))
+}).toDF("symbol","text")
+
+nyseDF.registerTempTable("data_nyse")
+symbolsDF.registerTempTable("symbols_data")
+
+sqlContext.setConf("spark.sql.shuffle.partitions","2")
+
+val query = sqlContext.sql("select * from data_nyse d left outer join symbols_data s on d.stockticker = s.symbol")
+
+val queryrdd = query.rdd
+
+val result = queryrdd.map(rec=> rec.mkString(","))
+
+result.coalesce(1).saveAsTextFile("/user/chaitanyapolipalli/Practice_exam/problem18/solution/")
